@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Online Flipbook</title>
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- StPageFlip -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/page-flip/dist/css/page-flip.css">
+<script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
+
+<style>
+body {
+  margin: 0;
+  background: #e5e5e5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+#book {
+  width: 900px;
+  height: 600px;
+}
+canvas {
+  width: 100%;
+  height: 100%;
+}
+</style>
+</head>
+
+<body>
+<div id="book"></div>
+
+<script>
+const pdfUrl = "book.pdf"; // 🔴 เปลี่ยนเป็นที่อยู่ PDF ของคุณ
+
+const pageFlip = new St.PageFlip(
+  document.getElementById("book"),
+  {
+    width: 450,
+    height: 600,
+    size: "stretch",
+    minWidth: 315,
+    maxWidth: 1000,
+    maxHeight: 1350,
+    showCover: true,
+    mobileScrollSupport: true
+  }
+);
+
+pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    pages.push(
+      pdf.getPage(i).then(page => {
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        const viewport = page.getViewport({ scale: 1.5 });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        return page.render({ canvasContext: context, viewport }).promise
+          .then(() => canvas);
+      })
+    );
+  }
+
+  Promise.all(pages).then(canvases => {
+    pageFlip.loadFromHTML(canvases);
+  });
+});
+</script>
+</body>
+</html>
