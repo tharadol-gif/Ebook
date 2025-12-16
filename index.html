@@ -71,6 +71,40 @@ html, body {
   transform: scale(.95);
 }
 
+/* Slider bar (quick navigation) */
+.sliderBar {
+  position: fixed;
+  bottom: 72px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+.sliderBar .inner {
+  width: min(900px, 95%);
+  background: rgba(15,23,42,.9);
+  padding: 8px 12px;
+  border-radius: 999px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  pointer-events: auto;
+}
+.sliderBar input[type="range"] {
+  width: 100%;
+}
+.pageLabel {
+  color: #fff;
+  font-size: 13px;
+  min-width: 60px;
+  text-align: center;
+}
+
+/* Ensure mobile view has bottom padding so canvases are not hidden behind toolbar */
+#mobileView { padding-bottom: 92px; }
+
 /* Mobile UI */
 @media (max-width: 768px) {
   body { overflow: auto; }
@@ -89,6 +123,14 @@ html, body {
 <div id="book"></div>
 <div id="mobileView"></div>
 
+<!-- Slider bar -->
+<div class="sliderBar" id="sliderBar" style="display:none;">
+  <div class="inner">
+    <input id="pageSlider" type="range" min="1" max="1" value="1" />
+    <div class="pageLabel" id="pageLabel">1/1</div>
+  </div>
+</div>
+
 <!-- Toolbar -->
 <div class="toolbar">
   <button onclick="prevPage()">◀</button>
@@ -101,8 +143,15 @@ html, body {
 const pdfUrl = "book.pdf"; // 🔴 เปลี่ยนชื่อไฟล์ถ้าจำเป็น
 let pageFlip;
 let isMobile = window.innerWidth <= 768;
+let currentPage = 1;
+let totalPages = 0;
 
 /* Load PDF */
+// Ensure PDF.js worker is set (required for CDN builds)
+if (window.pdfjsLib && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
 pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
 
   /* ===== MOBILE MODE ===== */
@@ -112,10 +161,8 @@ pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
         const viewport = page.getViewport({ scale: 1.5 });
-
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-
         page.render({ canvasContext: ctx, viewport }).promise
           .then(() => {
             document.getElementById("mobileView").appendChild(canvas);
@@ -126,11 +173,14 @@ pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
   }
 
   /* ===== DESKTOP MODE ===== */
+  const targetWidth = 600; // ขนาดเดียวกันสำหรับทุกหน้า (เปลี่ยนได้)
+  const targetHeight = 850;
+
   pageFlip = new St.PageFlip(
     document.getElementById("book"),
     {
-      width: 600,
-      height: 850,
+      width: targetWidth,
+      height: targetHeight,
       size: "stretch",
       minWidth: 320,
       maxWidth: 4000,
@@ -141,38 +191,125 @@ pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
     }
   );
 
-  const pages = [];
+  const pagePromises = [];
   for (let i = 1; i <= pdf.numPages; i++) {
-    pages.push(
+    pagePromises.push(
       pdf.getPage(i).then(page => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        const viewport = page.getViewport({ scale: 2 });
+        // render to an intermediate canvas at scale that fits target
+        const origVP = page.getViewport({ scale: 1 });
+        const scale = Math.min(targetWidth / origVP.width, targetHeight / origVP.height);
+        const renderVP = page.getViewport({ scale });
 
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+        const renderCanvas = document.createElement('canvas');
+        renderCanvas.width = Math.ceil(renderVP.width * DPR);
+        renderCanvas.height = Math.ceil(renderVP.height * DPR);
+        const renderCtx = renderCanvas.getContext('2d');
+        if (renderCtx) {
+          renderCtx.imageSmoothingEnabled = true;
+          try { renderCtx.imageSmoothingQuality = 'high'; } catch(e){}
+        }
+        renderCtx.setTransform(DPR,0,0,DPR,0,0);
 
-        return page.render({ canvasContext: ctx, viewport }).promise
-          .then(() => canvas);
+        return page.render({ canvasContext: renderCtx, viewport: renderVP }).promise
+          .then(() => {
+            // final canvas with exact target dimensions (DPR-aware)
+            const finalCanvas = document.createElement('canvas');
+            finalCanvas.width = Math.ceil(targetWidth * DPR);
+            finalCanvas.height = Math.ceil(targetHeight * DPR);
+            const finalCtx = finalCanvas.getContext('2d');
+            if (finalCtx) finalCtx.imageSmoothingEnabled = true;
+            finalCtx.fillStyle = '#ffffff';
+            finalCtx.fillRect(0,0,finalCanvas.width, finalCanvas.height);
+
+            // draw renderCanvas centered into finalCanvas
+            const drawW = renderCanvas.width;
+            const drawH = renderCanvas.height;
+            const offsetX = Math.round((finalCanvas.width - drawW) / 2);
+            const offsetY = Math.round((finalCanvas.height - drawH) / 2);
+            finalCtx.drawImage(renderCanvas, offsetX, offsetY, drawW, drawH);
+
+            // CSS size will match logical target (PageFlip handles scaling)
+            finalCanvas.style.width = targetWidth + 'px';
+            finalCanvas.style.height = targetHeight + 'px';
+            finalCanvas.style.willChange = 'transform';
+            finalCanvas.style.transform = 'translateZ(0)';
+
+            return finalCanvas;
+          });
       })
     );
   }
 
-  Promise.all(pages).then(canvases => {
-    pageFlip.loadFromHTML(canvases);
+  Promise.all(pagePromises).then(canvases => {
+    const pageElements = canvases.map(canvas => {
+      const pageEl = document.createElement('div');
+      pageEl.className = 'pf-page';
+      pageEl.style.width = targetWidth + 'px';
+      pageEl.style.height = targetHeight + 'px';
+      pageEl.appendChild(canvas);
+      return pageEl;
+    });
+
+    pageFlip.loadFromHTML(pageElements);
+    setTimeout(()=>{ try{ pageFlip.update(); }catch(e){} }, 60);
+    setTimeout(()=>{ try{ pageFlip.update(); }catch(e){} }, 300);
+
+    // setup slider
+    totalPages = canvases.length;
+    const slider = document.getElementById('pageSlider');
+    const label = document.getElementById('pageLabel');
+    const sliderBar = document.getElementById('sliderBar');
+    if (slider && label) {
+      slider.max = totalPages;
+      slider.value = 1;
+      label.textContent = `1/${totalPages}`;
+      sliderBar.style.display = isMobile ? 'none' : 'flex';
+
+      slider.addEventListener('input', (e) => {
+        const p = parseInt(e.target.value,10) || 1;
+        currentPage = p;
+        label.textContent = `${p}/${totalPages}`;
+        if (pageFlip) {
+          pageFlip.turnToPage(p);
+          try{ pageFlip.update(); }catch(e){}
+        }
+      });
+    }
   });
 
 });
 
 /* Controls */
 function nextPage() {
-  if (!isMobile && pageFlip) pageFlip.flipNext();
+  if (!isMobile && pageFlip) {
+    pageFlip.flipNext();
+    if (currentPage < totalPages) currentPage++;
+    updateSliderUI();
+    try{ pageFlip.update(); }catch(e){}
+  }
 }
 function prevPage() {
-  if (!isMobile && pageFlip) pageFlip.flipPrev();
+  if (!isMobile && pageFlip) {
+    pageFlip.flipPrev();
+    if (currentPage > 1) currentPage--;
+    updateSliderUI();
+    try{ pageFlip.update(); }catch(e){}
+  }
 }
 function goHome() {
-  if (!isMobile && pageFlip) pageFlip.turnToPage(0);
+  if (!isMobile && pageFlip) {
+    pageFlip.turnToPage(1);
+    currentPage = 1;
+    updateSliderUI();
+    try{ pageFlip.update(); }catch(e){}
+  }
+}
+function updateSliderUI() {
+  const slider = document.getElementById('pageSlider');
+  const label = document.getElementById('pageLabel');
+  if (slider) slider.value = Math.min(Math.max(1, currentPage), totalPages || 1);
+  if (label) label.textContent = `${slider ? slider.value : currentPage}/${totalPages || 0}`;
 }
 
 /* Fullscreen */
@@ -186,7 +323,7 @@ function toggleFullscreen() {
 
 /* Resize */
 window.addEventListener("resize", () => {
-  if (pageFlip) pageFlip.update();
+  try{ if (pageFlip) pageFlip.update(); }catch(e){}
 });
 </script>
 
