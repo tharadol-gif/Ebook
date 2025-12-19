@@ -42,7 +42,7 @@ html,body{
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
+  padding: 30px 15px;
   touch-action: pan-y;
 }
 
@@ -437,7 +437,7 @@ html,body{
 
 @media (max-width: 768px) {
   :root { --controls-height: 95px; }
-  #bookContainer { height: calc(var(--vh,1vh)*100 - var(--controls-height)); padding: 20px 10px; }
+  #bookContainer { height: calc(var(--vh,1vh)*100 - var(--controls-height)); padding: 15px 8px; }
   .sliderBar { width: 96%; padding: 4px 10px; }
   .toolbar button { width: 38px; height: 38px; font-size: 14px; }
   .nav-arrow {
@@ -734,7 +734,7 @@ async function calculateStandardDimensions() {
   
   const isMobile = window.innerWidth <= 768;
   const availableWidth = isMobile 
-    ? Math.min(window.innerWidth * 0.95, 800)
+    ? Math.min(window.innerWidth * 0.92, 700)
     : Math.min(window.innerWidth * 0.85, 1400);
   const availableHeight = (window.innerHeight - (isMobile ? 110 : 130)) * 0.85;
   const aspect = viewport.width / viewport.height;
@@ -747,7 +747,7 @@ async function calculateStandardDimensions() {
     width = height * aspect;
   }
   
-  targetWidth = Math.min(isMobile ? 700 : CONFIG.baseWidth, width);
+  targetWidth = Math.min(isMobile ? 650 : CONFIG.baseWidth, width);
   targetHeight = targetWidth / aspect;
   
   for (let i = 1; i <= totalPages; i++) {
@@ -765,6 +765,8 @@ function createFlipbook() {
   const bookEl = $('#book');
   bookEl.innerHTML = '';
   
+  const isMobile = window.innerWidth <= 768;
+  
   pageFlip = new St.PageFlip(bookEl, {
     width: targetWidth,
     height: targetHeight,
@@ -775,7 +777,7 @@ function createFlipbook() {
     maxHeight: 3000,
     showCover: true,
     mobileScrollSupport: false,
-    usePortrait: false,
+    usePortrait: isMobile,
     disableFlipByClick: false,
     swipeDistance: 50,
     clickEventForward: true,
