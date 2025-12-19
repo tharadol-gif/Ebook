@@ -31,6 +31,7 @@ html,body{
   color: #fff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   overflow: hidden;
+  touch-action: pan-y;
 }
 
 #bookContainer {
@@ -42,6 +43,7 @@ html,body{
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
+  touch-action: pan-y;
 }
 
 #bookContainer.zoomed {
@@ -50,7 +52,8 @@ html,body{
   -webkit-overflow-scrolling: touch;
   align-items: flex-start;
   padding-top: 0;
-  justify-content: flex-start;
+  justify-content: center;
+  touch-action: pan-x pan-y;
 }
 
 #bookContainer.zoomed:active {
@@ -67,14 +70,12 @@ html,body{
   transform-origin: top center;
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   margin-top: 0;
-  min-width: 100%;
+  touch-action: manipulation;
 }
 
 #bookContainer.zoomed #book {
   margin-top: 20px;
   margin-bottom: 20px;
-  margin-left: 20px;
-  margin-right: 20px;
 }
 
 #book::before {
@@ -103,7 +104,7 @@ html,body{
     inset 0 1px 0 rgba(255,255,255,0.6);
   border-radius: 2px;
   user-select: none;
-  pointer-events: none;
+  touch-action: none;
 }
 
 .pf-page canvas{
@@ -111,7 +112,7 @@ html,body{
   height: 100%;
   object-fit: contain;
   display: block;
-  pointer-events: none;
+  touch-action: none;
 }
 
 .canvas-wrapper {
@@ -121,7 +122,7 @@ html,body{
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  pointer-events: none;
+  touch-action: none;
 }
 
 .page-loading {
@@ -165,10 +166,12 @@ html,body{
   pointer-events: none;
   background: linear-gradient(to top, rgba(0,0,0,0.3), transparent);
   backdrop-filter: blur(4px);
+  touch-action: none;
 }
 
 .controls-container > * {
   pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .sliderBar {
@@ -204,6 +207,7 @@ html,body{
   font-size: 13px;
   font-weight: 600;
   outline: none;
+  touch-action: manipulation;
 }
 
 #pageInput:focus {
@@ -223,6 +227,7 @@ html,body{
   border-radius: 10px;
   outline: none;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 #pageSlider::-webkit-slider-thumb {
@@ -338,6 +343,7 @@ html,body{
   opacity: 0.7;
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  touch-action: manipulation;
 }
 
 .nav-arrow:hover {
@@ -347,6 +353,7 @@ html,body{
 
 .nav-arrow:active {
   transform: translateY(-50%) scale(0.95);
+  opacity: 1;
 }
 
 .nav-arrow:disabled {
@@ -507,7 +514,7 @@ const CONFIG = {
   maxDPR: 2,
   baseWidth: 900,
   maxConcurrentRenders: 3,
-  flipDebounce: 100,
+  flipDebounce: 150,
   renderQuality: 1.8
 };
 
@@ -569,13 +576,11 @@ function applyZoom() {
 function enablePanning() {
   const container = $('#bookContainer');
   
-  // Mouse events
   container.addEventListener('mousedown', startPan);
   container.addEventListener('mousemove', doPan);
   container.addEventListener('mouseup', endPan);
   container.addEventListener('mouseleave', endPan);
   
-  // Touch events
   container.addEventListener('touchstart', startPanTouch, { passive: false });
   container.addEventListener('touchmove', doPanTouch, { passive: false });
   container.addEventListener('touchend', endPan);
@@ -727,7 +732,6 @@ async function calculateStandardDimensions() {
   const samplePage = await pdfDoc.getPage(2);
   const viewport = samplePage.getViewport({ scale: 1 });
   
-  const container = $('#bookContainer');
   const isMobile = window.innerWidth <= 768;
   const availableWidth = isMobile 
     ? Math.min(window.innerWidth * 0.95, 800)
@@ -772,17 +776,17 @@ function createFlipbook() {
     showCover: true,
     mobileScrollSupport: false,
     usePortrait: false,
-    disableFlipByClick: true,
-    swipeDistance: 0,
-    clickEventForward: false,
-    useMouseEvents: false
+    disableFlipByClick: false,
+    swipeDistance: 50,
+    clickEventForward: true,
+    useMouseEvents: true
   });
   
   pageFlip.on('flip', e => {
     lastFlipTime = Date.now();
     currentPage = e.data + 1;
     updateVisiblePages(e.data);
-    updateUI();
+    setTimeout(() => updateUI(), 100);
   });
 }
 
@@ -935,38 +939,104 @@ function updateUI() {
 
 function goToPage(page) {
   page = Math.max(1, Math.min(page, totalPages));
-  currentPage = page;
+  if (page === currentPage) return;
   
-  updateVisiblePages(page - 1);
+  lastFlipTime = Date.now();
   
   try {
     pageFlip.turnToPage(page - 1);
+    currentPage = page;
+    updateVisiblePages(page - 1);
   } catch(e) {
-    console.error('Flip error:', e);
+    console.error('Turn to page error:', e);
   }
-  updateUI();
+  
+  setTimeout(() => updateUI(), 100);
 }
 
-const clickHandler = (next) => () => {
-  if (Date.now() - lastFlipTime < CONFIG.flipDebounce) return;
+function flipNext() {
+  if (currentPage >= totalPages) return;
   
-  if (next && currentPage < totalPages) {
-    currentPage++;
-    updateVisiblePages(currentPage - 1);
-    pageFlip.flipNext();
-  } else if (!next && currentPage > 1) {
-    currentPage--;
-    updateVisiblePages(currentPage - 1);
-    pageFlip.flipPrev();
+  const targetPage = currentPage + 1;
+  
+  try {
+    pageFlip.flip(targetPage - 1, 'top');
+    currentPage = targetPage;
+    updateVisiblePages(targetPage - 1);
+    lastFlipTime = Date.now();
+  } catch(err) {
+    console.error('Flip next error:', err);
   }
-  updateUI();
-};
+  
+  setTimeout(() => updateUI(), 100);
+}
 
-$('#prevBtn').addEventListener('click', clickHandler(false));
-$('#nextBtn').addEventListener('click', clickHandler(true));
+function flipPrev() {
+  if (currentPage <= 1) return;
+  
+  const targetPage = currentPage - 1;
+  
+  try {
+    pageFlip.flip(targetPage - 1, 'top');
+    currentPage = targetPage;
+    updateVisiblePages(targetPage - 1);
+    lastFlipTime = Date.now();
+  } catch(err) {
+    console.error('Flip prev error:', err);
+  }
+  
+  setTimeout(() => updateUI(), 100);
+}
 
-$('#navPrevBtn').addEventListener('click', clickHandler(false));
-$('#navNextBtn').addEventListener('click', clickHandler(true));
+// Event Listeners - Buttons
+$('#prevBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  flipPrev();
+});
+
+$('#nextBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  flipNext();
+});
+
+$('#navPrevBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  flipPrev();
+});
+
+$('#navNextBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  flipNext();
+});
+
+// Touch events for nav buttons
+$('#navPrevBtn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  flipPrev();
+});
+
+$('#navNextBtn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  flipNext();
+});
+
+$('#prevBtn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  flipPrev();
+});
+
+$('#nextBtn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  flipNext();
+});
 
 $('#firstBtn').addEventListener('click', () => {
   if (currentPage !== 1) {
@@ -974,10 +1044,28 @@ $('#firstBtn').addEventListener('click', () => {
   }
 });
 
+$('#firstBtn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  if (currentPage !== 1) {
+    goToPage(1);
+  }
+});
+
 $('#zoomInBtn').addEventListener('click', zoomIn);
 $('#zoomOutBtn').addEventListener('click', zoomOut);
+$('#zoomInBtn').addEventListener('touchend', (e) => { e.preventDefault(); zoomIn(); });
+$('#zoomOutBtn').addEventListener('touchend', (e) => { e.preventDefault(); zoomOut(); });
 
 $('#fsBtn').addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+});
+
+$('#fsBtn').addEventListener('touchend', (e) => {
+  e.preventDefault();
   if (!document.fullscreenElement) {
     document.documentElement.requestFullscreen().catch(() => {});
   } else {
@@ -996,6 +1084,7 @@ $('#pageInput').addEventListener('change', e => {
   e.target.value = page;
 });
 
+// Keyboard controls
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   if (Date.now() - keyboardThrottle < 100) return;
@@ -1003,13 +1092,13 @@ window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   
   if (key === 'arrowright' && currentPage < totalPages) {
-    $('#nextBtn').click();
+    flipNext();
     keyboardThrottle = Date.now();
   } else if (key === 'arrowleft' && currentPage > 1) {
-    $('#prevBtn').click();
+    flipPrev();
     keyboardThrottle = Date.now();
   } else if (key === 'home') {
-    $('#firstBtn').click();
+    goToPage(1);
   } else if (key === '+' || key === '=') {
     zoomIn();
   } else if (key === '-' || key === '_') {
@@ -1023,6 +1112,7 @@ window.addEventListener('keydown', e => {
   }
 });
 
+// Mouse wheel navigation
 let wheelTimeout = null;
 window.addEventListener('wheel', e => {
   if (zoomLevel > 1) return;
@@ -1035,13 +1125,13 @@ window.addEventListener('wheel', e => {
   }, 300);
   
   if (e.deltaY > 0 && currentPage < totalPages) {
-    $('#nextBtn').click();
+    flipNext();
   } else if (e.deltaY < 0 && currentPage > 1) {
-    $('#prevBtn').click();
+    flipPrev();
   }
 }, { passive: true });
 
-// Touch swipe for page navigation (only when not zoomed)
+// Touch swipe for page navigation
 let touchStartX = 0;
 let touchStartY = 0;
 let touchStartTime = 0;
@@ -1049,6 +1139,7 @@ let touchStartTime = 0;
 window.addEventListener('touchstart', e => {
   if (zoomLevel > 1) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+  if (e.target.closest('.controls-container')) return;
   
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
@@ -1058,6 +1149,7 @@ window.addEventListener('touchstart', e => {
 window.addEventListener('touchend', e => {
   if (zoomLevel > 1) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+  if (e.target.closest('.controls-container')) return;
   
   const touchEndX = e.changedTouches[0].clientX;
   const touchEndY = e.changedTouches[0].clientY;
@@ -1067,18 +1159,16 @@ window.addEventListener('touchend', e => {
   const deltaY = touchEndY - touchStartY;
   const deltaTime = touchEndTime - touchStartTime;
   
-  // Check if it's a swipe (fast horizontal movement)
   if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50 && deltaTime < 300) {
     if (deltaX > 0 && currentPage > 1) {
-      // Swipe right = previous page
-      $('#prevBtn').click();
+      flipPrev();
     } else if (deltaX < 0 && currentPage < totalPages) {
-      // Swipe left = next page
-      $('#nextBtn').click();
+      flipNext();
     }
   }
 }, { passive: true });
 
+// Resize handler
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
@@ -1087,6 +1177,7 @@ window.addEventListener('resize', () => {
   }, 200);
 });
 
+// Initialize
 init();
 </script>
 </body>
