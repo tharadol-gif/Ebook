@@ -225,10 +225,13 @@ function zoomOut() {
 async function init() {
   try {
     $('#loader').style.display = 'flex';
-    detectOrient();
+    const currentOrient = detectOrient();
     
-    pdf = await pdfjsLib.getDocument(CFG.pdfUrl).promise;
-    total = pdf.numPages;
+    // ถ้ามี pdf อยู่แล้ว ไม่ต้องโหลดใหม่
+    if (!pdf) {
+      pdf = await pdfjsLib.getDocument(CFG.pdfUrl).promise;
+      total = pdf.numPages;
+    }
     
     await calcDims();
     createFlip();
@@ -244,7 +247,7 @@ async function init() {
     $('#totalPages').textContent = total;
     
     await renderPage(1);
-    if (!isPort) await renderPage(2);
+    if (!currentOrient) await renderPage(2);
     
     flip.turnToPage(0);
     updateUI();
@@ -430,32 +433,43 @@ window.addEventListener('resize', () => {
   clearTimeout(resizeT);
   updateVh();
   const was = isPort;
-  detectOrient();
+  const newOrient = detectOrient();
   
   // บันทึกหน้าปัจจุบันก่อนเปลี่ยน
   savedPage = curPage;
   
-  if (was !== isPort) {
+  if (was !== newOrient) {
+    // เปลี่ยน orientation ต้อง reinit
     rendered.clear();
     queue.clear();
-    init().then(() => {
-      // กลับไปหน้าเดิมหลัง reinit
-      if (savedPage > 1) {
-        setTimeout(() => goPage(savedPage), 150);
-      }
-    });
+    const restorePage = savedPage;
+    
+    (async () => {
+      await init();
+      // กลับไปหน้าเดิมหลัง reinit เสร็จ
+      setTimeout(() => {
+        flip.turnToPage(restorePage - 1);
+        curPage = restorePage;
+        updateVisible(restorePage - 1);
+        updateUI();
+      }, 200);
+    })();
   } else {
+    // แค่ปรับขนาด ไม่ได้เปลี่ยน orientation
     resizeT = setTimeout(() => {
+      const restorePage = savedPage;
       calcDims().then(() => {
         rendered.clear();
         createFlip();
         createPages();
         flip.loadFromHTML(elems);
         // กลับไปหน้าเดิม
-        flip.turnToPage(savedPage - 1);
-        curPage = savedPage;
-        updateVisible(savedPage - 1);
-        updateUI();
+        setTimeout(() => {
+          flip.turnToPage(restorePage - 1);
+          curPage = restorePage;
+          updateVisible(restorePage - 1);
+          updateUI();
+        }, 100);
       });
     }, 300);
   }
