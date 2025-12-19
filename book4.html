@@ -489,7 +489,7 @@ body:not(.hide-controls) .controls-container {
 </div>
 <script>
 const CONFIG = {
-  pdfUrl: 'book4.pdf',
+  pdfUrl: 'book.pdf',
   renderAhead: 2,
   cleanupDistance: 6,
   maxDPR: 3,
@@ -686,10 +686,8 @@ async function init() {
     
     await renderPage(1);
     isCoverMode = true;
-    pageFlip.turnToPage(0);
-    currentPage = 1;
+    pageFlip.turnToPage(1);
     updateUI();
-
     
   } catch (err) {
     $('#loader').querySelector('.loader-text').textContent = 'ไม่พบไฟล์ PDF (book.pdf)';
@@ -709,7 +707,7 @@ function createFlipbook() {
     maxWidth: 4000,
     minHeight: 200,
     maxHeight: 4000,
-    showCover: true,
+    showCover: false,
     mobileScrollSupport: false
   });
   
@@ -990,5 +988,3 @@ init();
 </script>
 </body>
 </html></parameter>
-
-
