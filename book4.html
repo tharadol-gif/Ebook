@@ -686,8 +686,10 @@ async function init() {
     
     await renderPage(1);
     isCoverMode = true;
-    pageFlip.turnToPage(1);
+    pageFlip.turnToPage(0);
+    currentPage = 1;
     updateUI();
+
     
   } catch (err) {
     $('#loader').querySelector('.loader-text').textContent = 'ไม่พบไฟล์ PDF (book.pdf)';
@@ -707,7 +709,7 @@ function createFlipbook() {
     maxWidth: 4000,
     minHeight: 200,
     maxHeight: 4000,
-    showCover: false,
+    showCover: true,
     mobileScrollSupport: false
   });
   
@@ -988,4 +990,5 @@ init();
 </script>
 </body>
 </html></parameter>
+
 
