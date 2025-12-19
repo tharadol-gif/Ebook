@@ -489,7 +489,7 @@ body:not(.hide-controls) .controls-container {
 </div>
 <script>
 const CONFIG = {
-  pdfUrl: 'book4.pdf',
+  pdfUrl: 'book.pdf',
   renderAhead: 2,
   cleanupDistance: 6,
   maxDPR: 3,
@@ -520,7 +520,6 @@ let keyboardThrottle = 0;
 
 let isDragging = false;
 let startX, startY, scrollLeft, scrollTop;
-  let isFullscreenResize = false;
 
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 
@@ -691,7 +690,7 @@ async function init() {
     updateUI();
     
   } catch (err) {
-    $('#loader').querySelector('.loader-text').textContent = 'ไม่พบไฟล์ PDF (book4.pdf)';
+    $('#loader').querySelector('.loader-text').textContent = 'ไม่พบไฟล์ PDF (book.pdf)';
     console.error('Init error:', err);
   }
 }
@@ -915,20 +914,13 @@ $('#firstBtn').addEventListener('click', () => {
 $('#zoomInBtn').addEventListener('click', zoomIn);
 $('#zoomOutBtn').addEventListener('click', zoomOut);
 
-$('#fsBtn').addEventListener('click', async () => {
-  isFullscreenResize = true;
-
+$('#fsBtn').addEventListener('click', () => {
   if (!document.fullscreenElement) {
-    await document.documentElement.requestFullscreen();
+    document.documentElement.requestFullscreen().catch(() => {});
   } else {
-    await document.exitFullscreen();
+    document.exitFullscreen().catch(() => {});
   }
-
-  setTimeout(() => {
-    isFullscreenResize = false;
-  }, 600);
 });
-
 
 $('#pageSlider').addEventListener('input', e => {
 const page = parseInt(e.target.value, 10) || 1;
@@ -966,40 +958,11 @@ $('#fsBtn').click();
 }
 });
 window.addEventListener('resize', () => {
-  clearTimeout(resizeT);
-  updateVh();
-
-  // 🔒 resize จาก fullscreen → ห้าม init ใหม่
-  if (isFullscreenResize) {
-    resizeT = setTimeout(() => {
-      if (flip) {
-        flip.update();
-        flip.turnToPage(curPage - 1);
-        updateVisible(curPage - 1);
-        updateUI();
-      }
-    }, 300);
-    return;
-  }
-
-  const was = isPort;
-  detectOrient();
-
-  resizeT = setTimeout(() => {
-    if (was !== isPort) {
-      const keepPage = curPage;
-
-      rendered.clear();
-      queue.clear();
-
-      init().then(() => {
-        curPage = keepPage;
-        flip.turnToPage(curPage - 1);
-        updateVisible(curPage - 1);
-        updateUI();
-      });
-    }
-  }, 400);
+clearTimeout(resizeTimer);
+resizeTimer = setTimeout(() => {
+updateVh();
+try { pageFlip?.update(); } catch(e) {}
+}, 200);
 });
 let wheelThrottle = 0;
 const WHEEL_DELAY = 300;
@@ -1025,5 +988,3 @@ init();
 </script>
 </body>
 </html></parameter>
-
-
