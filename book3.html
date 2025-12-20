@@ -319,46 +319,47 @@ function createPages() {
 async function renderPage(n) {
   if (n < 1 || n > total || rendered.has(n) || queue.has(n)) return;
   queue.add(n);
-  
+
   try {
     const pg = await pdf.getPage(n);
     const dim = dims.get(n);
-    let rotation = dim.rot;
-    
-    // Auto-correct rotation if page appears sideways
-    if (rotation === 90 || rotation === 270) {
-      rotation = 0;
-    }
-    
+
+    // 👉 ตรวจว่าเป็นหน้าแนวนอนหรือไม่
     const isLandscapePage = dim.w > dim.h;
 
-let scale;
-if (isLandscapePage) {
-  // 👉 หน้าแนวนอน → ยึดความสูง
-  scale = (tH / dim.h) * CFG.quality;
-} else {
-  // 👉 หน้าแนวตั้ง → ยึดความกว้าง (เดิม)
-  scale = (tW / dim.w) * CFG.quality;
-}
+    // 👉 หมุนหน้าแนวนอนให้เป็นแนวตั้ง
+    let rotation = dim.rot;
+    if (isLandscapePage) {
+      rotation = 90;
+    }
+
+    // 👉 ใช้ scale เดียวทั้งเล่ม (สำคัญกับ PageFlip)
+    const scale = (tW / dim.w) * CFG.quality;
+
     const dpr = Math.min(window.devicePixelRatio || 1, CFG.maxDPR);
-    const vp = pg.getViewport({ scale: scale * dpr, rotation });
-    
+    const vp = pg.getViewport({
+      scale: scale * dpr,
+      rotation: rotation
+    });
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { alpha: false });
+
     canvas.width = vp.width;
     canvas.height = vp.height;
-    
+
     await pg.render({ canvasContext: ctx, viewport: vp }).promise;
-    
+
     canvas.style.width = '100%';
     canvas.style.height = '100%';
-    
+
     const el = elems[n - 1];
     el.querySelector('.canvas-wrapper').innerHTML = '';
     el.querySelector('.canvas-wrapper').appendChild(canvas);
     el.querySelector('.page-loading').classList.add('hidden');
-    
+
     rendered.set(n, canvas);
+
   } catch (err) {
     console.error(`Error page ${n}:`, err);
   } finally {
@@ -483,6 +484,7 @@ init();
 </script>
 </body>
 </html>
+
 
 
 
