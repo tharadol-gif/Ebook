@@ -107,6 +107,7 @@ const CFG = {
 
 const $ = s => document.querySelector(s);
 let pdf, flip, curPage = 1, total = 0, zoom = 1, tW = 0, tH = 0, isPort = false;
+let fsPage = null; // ✅ เก็บหน้าก่อนเข้า fullscreen
 let panning = false, startX, startY, scrLeft, scrTop;
 const dims = new Map(), rendered = new Map(), elems = [], queue = new Set();
 let resizeT, zoomT, kbT = 0;
@@ -410,8 +411,13 @@ $('#navNextBtn').addEventListener('click', () => curPage < total && flip.flipNex
 $('#zoomInBtn').addEventListener('click', zoomIn);
 $('#zoomOutBtn').addEventListener('click', zoomOut);
 $('#fsBtn').addEventListener('click', () => {
-  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
-  else document.exitFullscreen?.();
+  fsPage = curPage; // ✅ จำหน้าปัจจุบันไว้
+
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
 });
 
 document.addEventListener('keydown', e => {
@@ -454,7 +460,19 @@ document.addEventListener('contextmenu', e => {
   if (e.target.closest('.pf-page, #book')) e.preventDefault();
 });
 
+document.addEventListener('fullscreenchange', () => {
+  if (fsPage && flip) {
+    setTimeout(() => {
+      flip.turnToPage(fsPage - 1);
+      updateVisible(fsPage - 1);
+      updateUI();
+    }, 300); // รอให้ layout นิ่งก่อน
+  }
+});
+  
 init();
 </script>
 </body>
 </html>
+
+
